@@ -16,7 +16,9 @@ class Net(nn.Module):
         self.conv4 = nn.Conv2d(8, 8, 3)
         self.fc1 = nn.Linear(72, 64)
         self.fc2 = nn.Linear(64, 64)
-        self.fc3 = nn.Linear(64, 2)
+        self.pphen = nn.Linear(64, 2)
+        self.env = nn.Linear(64, 7)
+        self.psite = nn.Linear(64,4)
 
     def forward(self, x):
         x = self.pool(F.relu(self.conv1(x)))
@@ -26,38 +28,41 @@ class Net(nn.Module):
         x = torch.flatten(x, 1)
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
-        x = self.fc3(x)
-        return x
+        return self.pphen(x),self.env(x),self.psite(x)
 
 
 def right_bin_class(output, original):
     return sum([1 for i in range(len(output)) if np.argmax(output[i]) == original[i]])
 
-def train_epoch(net, loss, optimizer, input, output, batches):
+def train_epoch(net, losses, optimizers, input, output, indexes,batchsize,idx):
     random.shuffle(batches)
     rightamt = 0
     lossavg = 0
     net.train()
-    for batch in batches:
-        random.shuffle(batch)
+    for batch in batches(indexes,batchsize):
         optimizer.zero_grad()
         x_np = torch.from_numpy(input[batch]).float()
-        out = net(x_np)
-        lls = loss(out, torch.from_numpy(output[batch]).long())
+        out = net(x_np)[idx]
+        lls = losses[idx](out, torch.from_numpy(output[batch]).long())
         lls.backward()
-        optimizer.step()
+        optimizers[idx].step()
         realout = torch.softmax(out, 1).detach().numpy()
         rightamt += right_bin_class(realout, output[batch])
         lossavg += lls.sum().detach().numpy()
     return rightamt, lossavg
 
-def checkdata(net,input,output,batches):
+
+def batches(l, n):
+    random.shuffle(l)
+    return [l[i:i + n] for i in range(0, len(l), n)]
+
+def checkdata(net,input,output,batches,idx):
     net.eval()
     rightamt = 0
     with torch.no_grad():
         for batch in batches:
             x_np = torch.from_numpy(input[batch]).float()
-            out = net(x_np)
+            out = net(x_np)[idx]
             realout = torch.softmax(out, 1).detach().numpy()
             rightamt += right_bin_class(realout, output[batch])
     return rightamt

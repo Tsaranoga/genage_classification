@@ -4,12 +4,12 @@ import torch
 import torch.optim as optim
 import numpy as np
 import random
-
+from sklearn.metrics import accuracy_score
 
 class Net(nn.Module):
     def __init__(self):
         super().__init__()
-        self.conv1 = nn.Conv2d(3, 16, 3)
+        self.conv1 = nn.Conv2d(1, 16, 3)
         self.conv2 = nn.Conv2d(16, 16, 3)
         self.pool = nn.MaxPool2d(2, 2)
         self.conv3 = nn.Conv2d(16, 8, 3)
@@ -34,20 +34,35 @@ class Net(nn.Module):
 def right_bin_class(output, original):
     return sum([1 for i in range(len(output)) if np.argmax(output[i]) == original[i]])
 
+class nceloss:
+    def __init__(self):
+        self.lossf= nn.CrossEntropyLoss()
+    def loss(self,inpt,lbl):
+        return self.lossf(inpt,lbl.long())
+    def rightperc(self,output,original):
+        return sum([1 for i in range(len(output)) if np.argmax(output[i]) == original[i]])
+
+class mcloss:
+    def __init__(self):
+        self.lossf= nn.BCEWithLogitsLoss()
+    def loss(self,inpt,lbl):
+        return self.lossf(inpt,lbl)
+    def rightperc(self,output,original):
+        output=torch.sigmoid(output.detach()).numpy()
+        return sum([accuracy_score(original[i],output[i]) for i in range(len(output))])
+
 def train_epoch(net, losses, optimizers, input, output, indexes,batchsize,idx):
-    random.shuffle(batches)
     rightamt = 0
     lossavg = 0
     net.train()
     for batch in batches(indexes,batchsize):
-        optimizer.zero_grad()
+        net.zero_grad()
         x_np = torch.from_numpy(input[batch]).float()
         out = net(x_np)[idx]
-        lls = losses[idx](out, torch.from_numpy(output[batch]).long())
+        lls = losses[idx].loss(out, torch.from_numpy(output[batch]))
         lls.backward()
         optimizers[idx].step()
-        realout = torch.softmax(out, 1).detach().numpy()
-        rightamt += right_bin_class(realout, output[batch])
+        rightamt += losses[idx].rightperc(out.detach().numpy(), output[batch])
         lossavg += lls.sum().detach().numpy()
     return rightamt, lossavg
 
@@ -56,23 +71,24 @@ def batches(l, n):
     random.shuffle(l)
     return [l[i:i + n] for i in range(0, len(l), n)]
 
-def checkdata(net,input,output,batches,idx):
+def checkdata(net,input,output,indexes,batchsize,idx,losses):
     net.eval()
     rightamt = 0
     with torch.no_grad():
-        for batch in batches:
+        for batch in batches(indexes,batchsize):
             x_np = torch.from_numpy(input[batch]).float()
             out = net(x_np)[idx]
-            realout = torch.softmax(out, 1).detach().numpy()
-            rightamt += right_bin_class(realout, output[batch])
+            rightamt += losses[idx].rightperc(out.detach().numpy(), output[batch])
     return rightamt
 net = Net()
-loss = nn.CrossEntropyLoss()
-optimizer = optim.Adam(net.parameters(), lr=0.001)
-images = np.array([np.random.rand(3, 80, 80) for _ in range(200)])
-output_classes = np.array([np.random.randint(2) for _ in range(200)])
+loss = [nceloss(),]
+optimizer = [optim.Adam(net.parameters(), lr=0.001)]
+images = np.array([np.random.rand(1, 80, 80) for _ in range(200)])
+output_classes_pphen = np.array([np.random.randint(2) for _ in range(200)])
+output_classes_pphen = np.array([np.random.randint(2) for _ in range(200)])
 bsize = 30
 print(images[0:3].shape)
+trainidx=list(range(100))
 for _ in range(300):
-    print(train_epoch(net, loss, optimizer, images, output_classes, [[1, 3, 5, 7], [2, 6, 3, 7]]))
-    print("test:",checkdata(net,images,output_classes,[[9,4,5,2],[16,17,18,19]]))
+    print("train:",train_epoch(net, loss, optimizer, images, output_classes_pphen, trainidx,bsize,0))
+    print("test:",checkdata(net,images,output_classes_pphen,trainidx,bsize,0,loss))

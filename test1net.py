@@ -41,15 +41,21 @@ class nceloss:
         return self.lossf(inpt,lbl.long())
     def rightperc(self,output,original):
         return sum([1 for i in range(len(output)) if np.argmax(output[i]) == original[i]])
+    def right_idx(self,output,original):
+        return [i for i in range(len(output)) if np.argmax(output[i]) == original[i]]
 
 class mcloss:
-    def __init__(self):
+    def __init__(self,threshhold):
         self.lossf= nn.BCEWithLogitsLoss()
+        self.thresh=threshhold
     def loss(self,inpt,lbl):
         return self.lossf(inpt,lbl)
     def rightperc(self,output,original):
         output=torch.sigmoid(output.detach()).numpy()
         return sum([accuracy_score(original[i],output[i]) for i in range(len(output))])
+    def right_idx(self,output,original):
+        output=torch.sigmoid(output.detach()).numpy()
+        return [i for i in range(len(output)) if accuracy_score(original[i],output[i])>self.thresh  ]
 
 def train_epoch(net, losses, optimizers, input, output, indexes,batchsize,idx):
     rightamt = 0
@@ -80,6 +86,40 @@ def checkdata(net,input,output,indexes,batchsize,idx,losses):
             out = net(x_np)[idx]
             rightamt += losses[idx].rightperc(out.detach().numpy(), output[batch])
     return rightamt
+def flatten(t):
+    return [item for sublist in t for item in sublist]
+def generate_salency_map(net,input,output,indexes,idx,losses,batchsize):
+    net.eval()
+    right_idxes=[]
+    with torch.no_grad():
+        for batch in batches(indexes,batchsize):
+            x_np = torch.from_numpy(input[batch]).float()
+            out = net(x_np)[idx]
+            right_idxes.append([batch[right] for right in losses[idx].right_idx(out.detach().numpy(), output[batch])])
+    right_idxes= flatten(right_idxes)
+    if isinstance(output[0], np.int32):
+        out=max(output)
+    else:
+        out=len(output[0])
+    print(out)
+    for out_idx in range(out):
+        if isinstance(output[0], np.int32):
+            todoidxes=[i for i in right_idxes if output[i]==out_idx]
+        else:
+            todoidxes=[i for i in right_idxes if output[i][out_idx]==1]
+        allsalencies=[]
+        print(out_idx,todoidxes)
+        for index in todoidxes:
+            inpt = torch.from_numpy(input[index]).float()[None,:,:,:]
+
+            inpt.requires_grad_()
+            output = net(inpt)[idx]
+            output[0, out_idx].backward()
+            saliency, _ = torch.max(inpt.grad.data.abs(), dim=1)
+            print(saliency.shape)
+            saliency = saliency.reshape(80, 80)
+            allsalencies.append(saliency)
+
 net = Net()
 loss = [nceloss(),]
 optimizer = [optim.Adam(net.parameters(), lr=0.001)]
@@ -89,6 +129,9 @@ output_classes_pphen = np.array([np.random.randint(2) for _ in range(200)])
 bsize = 30
 print(images[0:3].shape)
 trainidx=list(range(100))
-for _ in range(300):
+
+for _ in range(30):
     print("train:",train_epoch(net, loss, optimizer, images, output_classes_pphen, trainidx,bsize,0))
     print("test:",checkdata(net,images,output_classes_pphen,trainidx,bsize,0,loss))
+
+generate_salency_map(net,images,output_classes_pphen,trainidx,0,loss,32)

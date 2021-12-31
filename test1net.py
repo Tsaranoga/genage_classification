@@ -5,7 +5,7 @@ import torch.optim as optim
 import numpy as np
 import random
 from sklearn.metrics import accuracy_score
-
+from PIL import Image
 class Net(nn.Module):
     def __init__(self):
         super().__init__()
@@ -41,8 +41,8 @@ class nceloss:
         return self.lossf(inpt,lbl.long())
     def rightperc(self,output,original):
         return sum([1 for i in range(len(output)) if np.argmax(output[i]) == original[i]])
-    def right_idx(self,output,original):
-        return [i for i in range(len(output)) if np.argmax(output[i]) == original[i]]
+    def right_idx(self,opt,original):
+        return [i for i in range(len(opt)) if np.argmax(opt[i]) == original[i]]
 
 class mcloss:
     def __init__(self,threshhold):
@@ -53,9 +53,9 @@ class mcloss:
     def rightperc(self,output,original):
         output=torch.sigmoid(output.detach()).numpy()
         return sum([accuracy_score(original[i],output[i]) for i in range(len(output))])
-    def right_idx(self,output,original):
-        output=torch.sigmoid(output.detach()).numpy()
-        return [i for i in range(len(output)) if accuracy_score(original[i],output[i])>self.thresh  ]
+    def right_idx(self,opt,original):
+        oux=torch.sigmoid(opt.detach()).numpy()
+        return [i for i in range(len(oux)) if accuracy_score(original[i],oux[i])>self.thresh  ]
 
 def train_epoch(net, losses, optimizers, input, output, indexes,batchsize,idx):
     rightamt = 0
@@ -91,34 +91,55 @@ def flatten(t):
 def generate_salency_map(net,input,output,indexes,idx,losses,batchsize):
     net.eval()
     right_idxes=[]
+    print(output[0])
+
     with torch.no_grad():
         for batch in batches(indexes,batchsize):
             x_np = torch.from_numpy(input[batch]).float()
             out = net(x_np)[idx]
             right_idxes.append([batch[right] for right in losses[idx].right_idx(out.detach().numpy(), output[batch])])
     right_idxes= flatten(right_idxes)
+    print(output[0])
     if isinstance(output[0], np.int32):
-        out=max(output)
+        out=np.unique(output)
     else:
-        out=len(output[0])
-    print(out)
-    for out_idx in range(out):
+        out=[]
+        for i in range(len(output[0])):
+            if sum([output[j][i] for j in range(len(output)) ])>0:
+                out.append(i)
+
+    print("ot:",out, isinstance(output[0], np.int32))
+    for out_idx in out:
         if isinstance(output[0], np.int32):
+            print("here")
             todoidxes=[i for i in right_idxes if output[i]==out_idx]
         else:
+            print(output[0])
             todoidxes=[i for i in right_idxes if output[i][out_idx]==1]
         allsalencies=[]
+        if len(todoidxes)==0:
+            print("not doing",out_idx)
+            continue
         print(out_idx,todoidxes)
         for index in todoidxes:
             inpt = torch.from_numpy(input[index]).float()[None,:,:,:]
 
             inpt.requires_grad_()
-            output = net(inpt)[idx]
-            output[0, out_idx].backward()
+            net_out = net(inpt)[idx]
+            net_out[0, out_idx].backward()
             saliency, _ = torch.max(inpt.grad.data.abs(), dim=1)
-            print(saliency.shape)
-            saliency = saliency.reshape(80, 80)
+
+            saliency = saliency.reshape(80* 80).numpy()
             allsalencies.append(saliency)
+        allsalencies=np.array(allsalencies)
+        normed=np.mean(allsalencies,axis=0).reshape(80,80)
+        print(normed.shape)
+        normed *= (255.0/normed.max())
+        im = Image.fromarray(normed)
+
+        print(normed)
+        im.convert("L").save("salency_map_"+str(idx) + "_"+str(out_idx) + "_" + str(len(todoidxes)) + ".png", format="png")
+
 
 net = Net()
 loss = [nceloss(),]
@@ -133,5 +154,5 @@ trainidx=list(range(100))
 for _ in range(30):
     print("train:",train_epoch(net, loss, optimizer, images, output_classes_pphen, trainidx,bsize,0))
     print("test:",checkdata(net,images,output_classes_pphen,trainidx,bsize,0,loss))
-
+print(output_classes_pphen[0])
 generate_salency_map(net,images,output_classes_pphen,trainidx,0,loss,32)

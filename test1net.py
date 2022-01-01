@@ -6,6 +6,7 @@ import numpy as np
 import random
 from sklearn.metrics import accuracy_score
 from PIL import Image
+
 class Net(nn.Module):
     def __init__(self):
         super().__init__()
@@ -26,8 +27,8 @@ class Net(nn.Module):
         x = self.pool(F.relu(self.conv3(x)))
         x = self.pool(F.relu(self.conv4(x)))
         x = torch.flatten(x, 1)
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
+        x = F.tanh(self.fc1(x))
+        x = F.tanh(self.fc2(x))
         return self.pphen(x),self.env(x),self.psite(x)
 
 
@@ -40,22 +41,24 @@ class nceloss:
     def loss(self,inpt,lbl):
         return self.lossf(inpt,lbl.long())
     def rightperc(self,output,original):
+        output=output.detach().numpy()
         return sum([1 for i in range(len(output)) if np.argmax(output[i]) == original[i]])
     def right_idx(self,opt,original):
-        return [i for i in range(len(opt)) if np.argmax(opt[i]) == original[i]]
+        oux=opt.detach().numpy()
+        return [i for i in range(len(opt)) if np.argmax(oux[i]) == original[i]]
 
 class mcloss:
     def __init__(self,threshhold):
         self.lossf= nn.BCEWithLogitsLoss()
         self.thresh=threshhold
     def loss(self,inpt,lbl):
-        return self.lossf(inpt,lbl)
+        return self.lossf(inpt,lbl.float())
     def rightperc(self,output,original):
-        output=torch.sigmoid(output.detach()).numpy()
-        return sum([accuracy_score(original[i],output[i]) for i in range(len(output))])
+        oux=torch.sigmoid(output.detach()).numpy()
+        return sum([accuracy_score(original[i],oux[i].round()) for i in range(len(output))])
     def right_idx(self,opt,original):
         oux=torch.sigmoid(opt.detach()).numpy()
-        return [i for i in range(len(oux)) if accuracy_score(original[i],oux[i])>self.thresh  ]
+        return [i for i in range(len(oux)) if accuracy_score(original[i],oux[i].round())>self.thresh  ]
 
 def train_epoch(net, losses, optimizers, input, output, indexes,batchsize,idx):
     rightamt = 0
@@ -68,7 +71,7 @@ def train_epoch(net, losses, optimizers, input, output, indexes,batchsize,idx):
         lls = losses[idx].loss(out, torch.from_numpy(output[batch]))
         lls.backward()
         optimizers[idx].step()
-        rightamt += losses[idx].rightperc(out.detach().numpy(), output[batch])
+        rightamt += losses[idx].rightperc(out, output[batch])
         lossavg += lls.sum().detach().numpy()
     return rightamt, lossavg
 
@@ -84,22 +87,21 @@ def checkdata(net,input,output,indexes,batchsize,idx,losses):
         for batch in batches(indexes,batchsize):
             x_np = torch.from_numpy(input[batch]).float()
             out = net(x_np)[idx]
-            rightamt += losses[idx].rightperc(out.detach().numpy(), output[batch])
+            rightamt += losses[idx].rightperc(out, output[batch])
     return rightamt
+
 def flatten(t):
     return [item for sublist in t for item in sublist]
+
 def generate_salency_map(net,input,output,indexes,idx,losses,batchsize):
     net.eval()
     right_idxes=[]
-    print(output[0])
-
     with torch.no_grad():
         for batch in batches(indexes,batchsize):
             x_np = torch.from_numpy(input[batch]).float()
             out = net(x_np)[idx]
-            right_idxes.append([batch[right] for right in losses[idx].right_idx(out.detach().numpy(), output[batch])])
+            right_idxes.append([batch[right] for right in losses[idx].right_idx(out, output[batch])])
     right_idxes= flatten(right_idxes)
-    print(output[0])
     if isinstance(output[0], np.int32):
         out=np.unique(output)
     else:
@@ -107,20 +109,15 @@ def generate_salency_map(net,input,output,indexes,idx,losses,batchsize):
         for i in range(len(output[0])):
             if sum([output[j][i] for j in range(len(output)) ])>0:
                 out.append(i)
-
-    print("ot:",out, isinstance(output[0], np.int32))
     for out_idx in out:
         if isinstance(output[0], np.int32):
-            print("here")
             todoidxes=[i for i in right_idxes if output[i]==out_idx]
         else:
-            print(output[0])
             todoidxes=[i for i in right_idxes if output[i][out_idx]==1]
         allsalencies=[]
         if len(todoidxes)==0:
-            print("not doing",out_idx)
+            print("not doing",out_idx, "from",idx)
             continue
-        print(out_idx,todoidxes)
         for index in todoidxes:
             inpt = torch.from_numpy(input[index]).float()[None,:,:,:]
 
@@ -133,26 +130,26 @@ def generate_salency_map(net,input,output,indexes,idx,losses,batchsize):
             allsalencies.append(saliency)
         allsalencies=np.array(allsalencies)
         normed=np.mean(allsalencies,axis=0).reshape(80,80)
-        print(normed.shape)
         normed *= (255.0/normed.max())
         im = Image.fromarray(normed)
-
-        print(normed)
-        im.convert("L").save("salency_map_"+str(idx) + "_"+str(out_idx) + "_" + str(len(todoidxes)) + ".png", format="png")
+        im.convert("L").save(f"salency_map_{idx}_{out_idx}_{len(todoidxes)}.png", format="png")
 
 
 net = Net()
-loss = [nceloss(),]
-optimizer = [optim.Adam(net.parameters(), lr=0.001)]
+loss = [nceloss(),mcloss(0.9)]
+baselr=0.001
 images = np.array([np.random.rand(1, 80, 80) for _ in range(200)])
 output_classes_pphen = np.array([np.random.randint(2) for _ in range(200)])
-output_classes_pphen = np.array([np.random.randint(2) for _ in range(200)])
+output_classes_env = np.array([[np.random.randint(2) for _ in range(7)] for _ in range(100)])
+
+optimizer = [optim.Adam(net.parameters(), lr=baselr),optim.Adam(net.parameters(), lr=baselr*(len(output_classes_pphen)/len(output_classes_env)))] # adapt learning rate to be equal for all outputs
 bsize = 30
-print(images[0:3].shape)
+
 trainidx=list(range(100))
 
 for _ in range(30):
     print("train:",train_epoch(net, loss, optimizer, images, output_classes_pphen, trainidx,bsize,0))
+    print("train:",train_epoch(net, loss, optimizer, images, output_classes_env, trainidx,bsize,1))
     print("test:",checkdata(net,images,output_classes_pphen,trainidx,bsize,0,loss))
-print(output_classes_pphen[0])
 generate_salency_map(net,images,output_classes_pphen,trainidx,0,loss,32)
+generate_salency_map(net,images,output_classes_env,trainidx,1,loss,32)

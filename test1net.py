@@ -27,8 +27,8 @@ class Net(nn.Module):
         x = self.pool(F.relu(self.conv3(x)))
         x = self.pool(F.relu(self.conv4(x)))
         x = torch.flatten(x, 1)
-        x = F.tanh(self.fc1(x))
-        x = F.tanh(self.fc2(x))
+        x = torch.tanh(self.fc1(x))
+        x = torch.tanh(self.fc2(x))
         return self.pphen(x),self.env(x),self.psite(x)
 
 
@@ -36,8 +36,9 @@ def right_bin_class(output, original):
     return sum([1 for i in range(len(output)) if np.argmax(output[i]) == original[i]])
 
 class nceloss:
-    def __init__(self):
-        self.lossf= nn.CrossEntropyLoss()
+    def __init__(self,weight):
+        print(weight)
+        self.lossf= nn.CrossEntropyLoss(weight=torch.FloatTensor(weight))
     def loss(self,inpt,lbl):
         return self.lossf(inpt,lbl.long())
     def rightperc(self,output,original):
@@ -48,8 +49,9 @@ class nceloss:
         return [i for i in range(len(opt)) if np.argmax(oux[i]) == original[i]]
 
 class mcloss:
-    def __init__(self,threshhold):
-        self.lossf= nn.BCEWithLogitsLoss()
+    def __init__(self,weight,threshhold):
+        print(weight)
+        self.lossf= nn.BCEWithLogitsLoss(weight=torch.FloatTensor(weight))
         self.thresh=threshhold
     def loss(self,inpt,lbl):
         return self.lossf(inpt,lbl.float())
@@ -136,12 +138,26 @@ def generate_salency_map(net,input,output,indexes,idx,losses,batchsize):
 
 
 net = Net()
-loss = [nceloss(),mcloss(0.9)]
+def genweight_classes(data):
+    values, counts = np.unique(data, return_counts=True)
+    if max(data)+1!=len(values):
+        print("something is wrong",max(data),len(values),values)
+        exit(-1)
+    minval=min(counts)
+    return [minval/j for j in counts ]
+
+def genweight_multi_classes(data):
+    nws=np.array([sum(data[:,i]) for i in range(len(data[0]))])
+    return np.array([min(nws)/sum(data[:,i]) for i in range(len(data[0]))])
+
 baselr=0.001
 images = np.array([np.random.rand(1, 80, 80) for _ in range(200)])
 output_classes_pphen = np.array([np.random.randint(2) for _ in range(200)])
 output_classes_env = np.array([[np.random.randint(2) for _ in range(7)] for _ in range(100)])
 
+
+
+loss = [nceloss(genweight_classes(output_classes_pphen)),mcloss(genweight_multi_classes(output_classes_env),0.9)]
 optimizer = [optim.Adam(net.parameters(), lr=baselr),optim.Adam(net.parameters(), lr=baselr*(len(output_classes_pphen)/len(output_classes_env)))] # adapt learning rate to be equal for all outputs
 bsize = 30
 

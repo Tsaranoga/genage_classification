@@ -1,5 +1,9 @@
 """ Gwendolyn Gusak, Tobias Woertwein """
 
+'''
+Completely obsolete as everything is now done in 'GENage_data_preprocessing.py'.
+'''
+
 import pandas as pd
 
 if __name__ == '__main__':
@@ -34,10 +38,10 @@ if __name__ == '__main__':
     filter2 = environment.merge(pa_pheno, on='Unnamed: 0')
 
     # Sanity checks:
-    # print(f'Env file: {environment.shape}\tPphen file: {pa_pheno.shape}\tPsite file: {pa_site.shape}\tFilter1: '
-    #     f'{filter1.shape}\tFilter2: {filter2.shape}')
-    # print(f'{environment.head()}\t{pa_pheno.head()}\t{pa_site.head()}')
-    # print(f'{filter1.head()}\t{filter2.head()}')
+    #print(f'Env file: {environment.shape}\tPphen file: {pa_pheno.shape}\tPsite file: {pa_site.shape}\tFilter1: '
+    #      f'{filter1.shape}\tFilter2: {filter2.shape}')
+    #print(f'{environment.head()}\t{pa_pheno.head()}\t{pa_site.head()}')
+    #print(f'{filter1.head()}\t{filter2.head()}')
 
 
     # 3. Generate new csv files from the merged dataframes

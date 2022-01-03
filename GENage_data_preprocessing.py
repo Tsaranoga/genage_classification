@@ -1,24 +1,80 @@
 """ Gwendolyn Gusak, Tobias Woertwein """
 
 import pandas as pd
+from typing import Tuple
+
+
+def read_csv_file(filepath: str, separator: bool, data_types: Tuple[str, str]) -> pd.DataFrame:
+    """
+
+    :param filepath: String specifying the file path for input file
+    :param separator: True = ',' & False = ';'
+    :param data_types: Tuple specifying the data types for first column & rest of the columns
+    :return: Pandas dataframe generated from input file
+    """
+
+    if separator:
+        s = ','
+    else:
+        s = ';'
+
+    col_names = pd.read_csv(filepath, sep=s, nrows=0).columns
+    first_col_name = col_names[0]
+    dtypes = {first_col_name: data_types[0]}
+    dtypes.update({col: data_types[1] for col in col_names if col not in dtypes})
+
+    dataframe = pd.read_csv(filepath, sep=s, dtype=dtypes)
+
+    return dataframe
+
+
+def drop_cols(dataframe: pd.DataFrame, threshold: int) -> pd.DataFrame:
+    """
+
+    :param dataframe: Input pandas dataframe
+    :param threshold: Integer specifying the minimum amount of entries required for each column in input dataframe
+    :return: Pandas dataframe containing all columns that meet at least the threshold
+    """
+
+    cols_to_drop = []
+
+    for i in dataframe.columns:
+        if int(dataframe.sum(axis=0).loc[i]) < threshold:
+            cols_to_drop.append(i)
+
+    dataframe = dataframe.drop(cols_to_drop, axis=1)
+
+    return dataframe
+
 
 if __name__ == '__main__':
 
-    # 1. Import the csv files
+    ''' Import all csv files '''
     #   a) abundance file
-    col_names = pd.read_csv('./data/PGPT_abundance.csv', sep=';', nrows=0).columns
-    # genes = col_names[1:]
-    dtypes_abund = {'column=genes - rows=strains': str}
-    dtypes_abund.update({col: int for col in col_names if col not in dtypes_abund})
+    abundance = read_csv_file('./data/PGPT_abundance.csv', False, ('str', 'int'))
+    abundance.name = 'abundance'
+    # strains = abundance['column=genes - rows=strains'].tolist()
 
-    abundance = pd.read_csv('./data/PGPT_abundance.csv', sep=';', dtype=dtypes_abund)
+    #   b) env file
+    environment = read_csv_file('./data/env.csv', True, ('str', 'int'))
+    #environment = drop_cols(environment, 100)  # Filter such that only columns with >= 100 entries remain
+    environment.name = 'environment'
 
-    strains = abundance['column=genes - rows=strains'].tolist()
+    #   c) pphen file
+    pa_pheno = read_csv_file('./data/pphen.csv', True, ('str', 'int'))
+    #pa_pheno = drop_cols(pa_pheno, 100)  # Filter such that only columns with >= 100 entries remain
+    pa_pheno.name = 'pa_pheno'
 
-    #    b) taxnames file
-    taxnames = pd.read_csv('./data/taxnames.csv', sep=';', dtype=str)
+    #   d) psite file
+    pa_site = read_csv_file('./data/psite.csv', True, ('str', 'int'))
+    #pa_site = drop_cols(pa_site, 100)  # Filter such that only columns with >= 100 entries remain
+    pa_site.name = 'pa_site'
 
-    # separate strains according to unclassified phyla
+    #   e) taxnames file
+    taxnames = read_csv_file('./data/taxnames.csv', False, ('str', 'str'))
+
+    ''' Filter all files such that only strains remain where PHYLUM is classified '''
+    # Separate strains according to unclassified phyla
     unclassified_taxa = taxnames[taxnames['PHYLUM'] == 'unclassified']
     classified_taxa = taxnames[taxnames['PHYLUM'] != 'unclassified']
     classified_strains = classified_taxa['IMG GENOME ID'].tolist()
@@ -26,46 +82,44 @@ if __name__ == '__main__':
     # Write classified taxa in file for further use
     classified_taxa.to_csv('./data/classified_taxa.csv', sep=',', encoding='utf-8', index=False)
 
-    # subset abundances such that only strains with classified phyla persist
-    filtered_abundance = abundance.loc[abundance['column=genes - rows=strains'].isin(classified_strains)]
+    # Subset all other files such that only strains with classified phyla persist
+    # & Save the filtered dataframes to files
+    df_list = [abundance, environment, pa_pheno, pa_site]
 
-    #    c) Rest of the files
-    # with merged env, pphen & psite
-    col_names1 = pd.read_csv('./data/env_pphen_psite_merged.csv', nrows=0).columns
-    dtypes1 = {'Unnamed: 0': str}
-    dtypes1.update({col: int for col in col_names1 if col not in dtypes1})
+    for df in df_list:
+        file = f'./data/filtered_{df.name}.csv'
+        tmp_df = df.loc[df[df.columns[0]].isin(classified_strains)]
 
-    env_pphen_psite = pd.read_csv('./data/env_pphen_psite_merged.csv', dtype=dtypes1)
-    env_pphen_psite = env_pphen_psite.loc[env_pphen_psite['Unnamed: 0'].isin(classified_strains)]
-    # Write to file version filtered for classified phyla only
-    env_pphen_psite.to_csv('./data/env_pphen_psite_merged_filtered.csv', sep=',', encoding='utf-8', index=False)
+        if df.name == 'abundance':
+            new_abundance = tmp_df
 
-    # subset filtered abundances such that only strains with env, pphen & psite exist
-    env_pphen_psite_strains = env_pphen_psite['Unnamed: 0'].tolist()
-    filtered_abundance1 = abundance.loc[abundance['column=genes - rows=strains'].isin(env_pphen_psite_strains)]
-    filtered_abundance1.to_csv('./data/fully_filtered_abundances_3files.csv', sep=',', encoding='utf-8', index=False)
+        #print(f'Shape filtered {df.name}: {tmp_df.shape}')
+        tmp_df.to_csv(file, sep=',', encoding='utf-8', index=False)
 
-    # with merged env, pphen
-    col_names2 = pd.read_csv('./data/env_pphen_merged.csv', nrows=0).columns
-    dtypes2 = {'Unnamed: 0': str}
-    dtypes2.update({col: int for col in col_names2 if col not in dtypes1})
+    ''' Only needed for single output '''
+    # Merge environment, pa_pheno & pa_site
+    merged_output = environment.merge(pa_pheno, on='Unnamed: 0').merge(pa_site, on='Unnamed: 0')
+    merged_output = drop_cols(merged_output, 100)
+    merged_output = merged_output.loc[merged_output[merged_output.columns[0]].isin(classified_strains)]
+    merged_output.to_csv('./data/single_output.csv', sep=',', encoding='utf-8', index=False)
 
-    env_pphen = pd.read_csv('./data/env_pphen_merged.csv', dtype=dtypes2)
-    env_pphen = env_pphen.loc[env_pphen['Unnamed: 0'].isin(classified_strains)]
-    # Write to file version filtered for classified phyla only
-    env_pphen.to_csv('./data/env_pphen_merged_filtered.csv', sep=',', encoding='utf-8', index=False)
+    # Filter abundance with merged_output
+    merged_output_strains = merged_output['Unnamed: 0'].tolist()
+    filtered_abundance = new_abundance.loc[new_abundance['column=genes - rows=strains'].isin(merged_output_strains)]
+    filtered_abundance.to_csv('./data/filtered_abundance_single_output.csv', sep=',', encoding='utf-8', index=False)
 
-    # subset filtered abundances such that only strains with env & pphen exist
-    env_pphen_strains = env_pphen['Unnamed: 0'].tolist()
-    filtered_abundance2 = abundance.loc[abundance['column=genes - rows=strains'].isin(env_pphen_strains)]
-    filtered_abundance2.to_csv('./data/fully_filtered_abundances_2files.csv', sep=',', encoding='utf-8', index=False)
-
-    # Sanity Checks:
-    #print(f'Original: {abundance.shape}')
+    ''' Sanity Checks '''
+    #print(f'Abundance: {abundance.shape}')
     #print(f'{abundance.head()}\n')
 
-    #print(f' W/o unclassified: {filtered_abundance.shape}')
-    #print(f'{filtered_abundance.head()}\n')
+    #print(taxnames.ndim)
+    #print(taxnames.dtypes)
+    #print(taxnames.shape)
+    #print(taxnames.head())
+    #Check for duplicates: print(taxnames.duplicated().sum())
+
+    #print(f'Env file\tPphen file\tPsite file\n{environment.shape}\t{pa_pheno.shape}\t{pa_site.shape}')
+    #print(f'{environment.head()}\t{pa_pheno.head()}\t{pa_site.head()}')
 
     #print(f' Only with env, pphen & psite: {filtered_abundance1.shape}')
     #print(f'{filtered_abundance1.head()}\n')
@@ -76,11 +130,6 @@ if __name__ == '__main__':
     #print(env_pphen_strains)
     #print(env_pphen_psite_strains)
 
-    #print(taxnames.ndim)
-    #print(taxnames.dtypes)
-    #print(taxnames.shape)
-    #print(taxnames.head())
-    # Check for duplicates: print(taxnames.duplicated().sum())
     #print(classified_taxa.shape)
     #print(classified_taxa.head())
     #print(abundance['column=genes - rows=strains'])

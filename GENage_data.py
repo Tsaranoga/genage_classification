@@ -5,10 +5,10 @@ import cv2
 import numpy as np
 import pickle
 from sklearn.model_selection import StratifiedShuffleSplit
-from typing import Union
+from typing import Union, Tuple
 
 
-def parse_dict_from_file(filepath: str, delim: str = ',') -> dict:
+def parse_dict_from_file(filepath: str, delim: str = ',') -> Union[dict, Tuple[list, dict]]:
     """
 
     :param filepath: String specifying the input file path
@@ -18,6 +18,7 @@ def parse_dict_from_file(filepath: str, delim: str = ',') -> dict:
 
     dictionary = {}
     class_dict = {}
+    genes = []
 
     with open(filepath, 'r') as file:
         reader = csv.reader(file, delimiter=delim)
@@ -28,6 +29,11 @@ def parse_dict_from_file(filepath: str, delim: str = ',') -> dict:
 
             if index == 0:
                 header_row = row
+
+                if len(header_row) == 6356:
+
+                    for gene in header_row[1:]:
+                        genes.append(gene)
 
             else:
                 if index != 0:
@@ -94,6 +100,10 @@ def parse_dict_from_file(filepath: str, delim: str = ',') -> dict:
                     tmp_dict.update({strain: dictionary.get(strain)})
 
         dictionary = tmp_dict
+
+    if genes:
+
+        return genes, dictionary
 
     return dictionary
 
@@ -321,10 +331,11 @@ if __name__ == '__main__':
     ''' Generate input '''
     # Input dictionary
     # input_dict_so = parse_dict_from_file('./data/filtered_abundance_single_output.csv') (only for single output)
-    input_dict = parse_dict_from_file('./data/filtered_abundance.csv')
+    gene_list, input_dict = parse_dict_from_file('./data/filtered_abundance.csv')
     dictionary_to_images(input_dict)
     #   Store input dictionary in pickle file
     store_as_pickle(input_dict, 'input')
+    store_as_pickle(gene_list, 'gene_list')
 
     ''' Generate ground truth (gt) dictionaries '''
 

@@ -1,4 +1,10 @@
-""" Gwendolyn Gusak, Tobias Woertwein """
+"""
+    Generates pickle files for all dictionaries for input and all ground truth files ALONG WITH
+    the pickle files for all lists containing strain IDs for training, validation and test subsetting
+    splitted according to equal ratio and obtained for each ground truth file. Additionally a pickle
+    file containing a list of gene names is generated.
+    Required as input: Generated files from program GENage_data_preprocessing.py
+"""
 
 import csv
 import cv2
@@ -6,6 +12,8 @@ import numpy as np
 import pickle
 from sklearn.model_selection import StratifiedShuffleSplit
 from typing import Union, Tuple
+
+__author__ = "Gwendolyn Gusak, Tobias Woertwein"
 
 
 def parse_dict_from_file(filepath: str, delim: str = ',') -> Union[dict, Tuple[list, dict]]:

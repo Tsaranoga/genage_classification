@@ -1,7 +1,13 @@
-""" Gwendolyn Gusak, Tobias Woertwein """
+"""
+    Generates files filtered_abundance.csv, filtered_environment.csv, filtered_pa_pheno.csv
+    and filtered_pa_site.csv for multi-output OR filtered_abundance_single_output.csv and
+    single_output.csv for single output ALONG WITH classified_taxa.csv
+"""
 
 import pandas as pd
 from typing import Tuple
+
+__author__ = "Gwendolyn Gusak, Tobias Woertwein"
 
 
 def read_csv_file(filepath: str, separator: bool, data_types: Tuple[str, str]) -> pd.DataFrame:

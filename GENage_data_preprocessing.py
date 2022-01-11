@@ -1,7 +1,6 @@
 """
     Generates files filtered_abundance.csv, filtered_environment.csv, filtered_pa_pheno.csv
-    and filtered_pa_site.csv for multi-output OR filtered_abundance_single_output.csv and
-    single_output.csv for single output ALONG WITH classified_taxa.csv
+    and filtered_pa_site.csv for multi-output
 """
 
 import pandas as pd
@@ -34,46 +33,23 @@ def read_csv_file(filepath: str, separator: bool, data_types: Tuple[str, str]) -
     return dataframe
 
 
-def drop_cols(dataframe: pd.DataFrame, threshold: int) -> pd.DataFrame:
-    """
-
-    :param dataframe: Input pandas dataframe
-    :param threshold: Integer specifying the minimum amount of entries required for each column in input dataframe
-    :return: Pandas dataframe containing all columns that meet at least the threshold
-    """
-
-    cols_to_drop = []
-
-    for i in dataframe.columns:
-        if int(dataframe.sum(axis=0).loc[i]) < threshold:
-            cols_to_drop.append(i)
-
-    dataframe = dataframe.drop(cols_to_drop, axis=1)
-
-    return dataframe
-
-
 if __name__ == '__main__':
 
     ''' Import all csv files '''
     #   a) abundance file
     abundance = read_csv_file('./data/PGPT_abundance.csv', False, ('str', 'int'))
     abundance.name = 'abundance'
-    # strains = abundance['column=genes - rows=strains'].tolist()
 
     #   b) env file
     environment = read_csv_file('./data/env.csv', True, ('str', 'int'))
-    #environment = drop_cols(environment, 100)  # Filter such that only columns with >= 100 entries remain
     environment.name = 'environment'
 
     #   c) pphen file
     pa_pheno = read_csv_file('./data/pphen.csv', True, ('str', 'int'))
-    #pa_pheno = drop_cols(pa_pheno, 100)  # Filter such that only columns with >= 100 entries remain
     pa_pheno.name = 'pa_pheno'
 
     #   d) psite file
     pa_site = read_csv_file('./data/psite.csv', True, ('str', 'int'))
-    #pa_site = drop_cols(pa_site, 100)  # Filter such that only columns with >= 100 entries remain
     pa_site.name = 'pa_site'
 
     #   e) taxnames file
@@ -101,18 +77,6 @@ if __name__ == '__main__':
 
         #print(f'Shape filtered {df.name}: {tmp_df.shape}')
         tmp_df.to_csv(file, sep=',', encoding='utf-8', index=False)
-
-    ''' Only needed for single output '''
-    # Merge environment, pa_pheno & pa_site
-    merged_output = environment.merge(pa_pheno, on='Unnamed: 0').merge(pa_site, on='Unnamed: 0')
-    merged_output = drop_cols(merged_output, 100)
-    merged_output = merged_output.loc[merged_output[merged_output.columns[0]].isin(classified_strains)]
-    merged_output.to_csv('./data/single_output.csv', sep=',', encoding='utf-8', index=False)
-
-    # Filter abundance with merged_output
-    merged_output_strains = merged_output['Unnamed: 0'].tolist()
-    filtered_abundance = new_abundance.loc[new_abundance['column=genes - rows=strains'].isin(merged_output_strains)]
-    filtered_abundance.to_csv('./data/filtered_abundance_single_output.csv', sep=',', encoding='utf-8', index=False)
 
     ''' Sanity Checks '''
     #print(f'Abundance: {abundance.shape}')

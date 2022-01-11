@@ -128,92 +128,6 @@ def dictionary_to_images(input_dict: dict):
         cv2.imwrite(filename, matrix)
 
 
-'''
-def generate_bin_dict(gt_traits: dict, traits_oi: list):
-
-    bin_dict = {}
-
-    for strain in gt_traits.keys():
-        current_bin = []
-        traits_dict = gt_traits.get(strain)
-
-        for trait in traits_oi:
-            current_trait = traits_dict.get(trait)
-            current_bin.append(current_trait)
-
-        bin_dict.update({strain: current_bin})
-
-    cls = np.array([str(i) for i in bin_dict.values()])
-    print(np.unique(cls, return_counts=True))  # Remove strains with class < 10/50
-
-    return bin_dict
-
-
-def generate_train_validation_test_splits(data: dict, traits_oi: list):
-
-    # 1. Preparation for first split into training and temporary indices lists
-    bin_dict = generate_bin_dict(data, traits_oi)  # get dictionary with trait bins
-    key_list = list(bin_dict)  # extract strains from bin_dict
-
-    training = []
-    tmp = []
-
-    x = np.zeros(len(key_list))  # original amount of strains
-    y = np.array(list(bin_dict.values()))  # original bins derived by traits per strain
-
-    print(f'Before first split: x={len(key_list)}, y={y.sum(axis=0)}')
-
-    # 2. First split of strains into training & temporary indices lists
-    splitter1 = StratifiedShuffleSplit(n_splits=1, test_size=0.4, random_state=7)
-    train_indices, tmp_indices = next(splitter1.split(x, y))
-
-    #   a) Extract list of training strains
-    for train_i in train_indices:
-        training.append(key_list[train_i])
-
-    #   b) Extract list of remaining/ temporary strains
-    for tmp_i in tmp_indices:
-        tmp.append(key_list[tmp_i])
-
-    # 3. Preparation for second split into validation and test indices lists
-    new_traits_dict = {key: data[key] for key in tmp}  # extract traits for remaining strains
-    new_bin_dict = generate_bin_dict(new_traits_dict, traits_oi)  # get dictionary with trait bins
-    new_key_list = list(new_bin_dict)  # extract strains from new_bin_dict
-
-    validation = []
-    test = []
-
-    new_x = np.zeros(len(new_key_list))  # amount of remaining strains
-    new_y = np.array(list(new_bin_dict.values()))  # new bins derived by traits per remaining strain
-
-    print(f'Before second split: x={len(new_key_list)}, y={new_y.sum(axis=0)}')
-
-    # 4. Second split of strains into validation & test indices lists
-    splitter2 = StratifiedShuffleSplit(n_splits=1, test_size=0.5, random_state=7)
-    validation_indices, test_indices = next(splitter2.split(new_x, new_y))
-
-    #   a) Extract list of validation strains
-    for validation_i in validation_indices:
-        validation.append(new_key_list[validation_i])
-
-    #   b) Extract list of test strains
-    for test_i in test_indices:
-        test.append(new_key_list[test_i])
-
-    n_traits_dict = {key: data[key] for key in test}  # extract traits for remaining strains
-    n_bin_dict = generate_bin_dict(n_traits_dict, traits_oi)  # get dictionary with trait bins
-    n_key_list = list(n_bin_dict)  # extract strains from new_bin_dict
-
-    n_x = np.zeros(len(n_key_list))  # amount of remaining strains
-    n_y = np.array(list(n_bin_dict.values()))  # new bins derived by traits per remaining strain
-
-    print(f'After second split: x={len(n_key_list)}, y={n_y.sum(axis=0)}')
-
-    # 5. Return relevant lists containing strains for the training, validation or test, respectively
-    return training, validation, test
-'''
-
-
 def generate_bin_dict(gt_dict: dict) -> dict:
     """
 
@@ -309,16 +223,6 @@ def generate_train_validation_test_splits(data: dict) -> (list, list, list):
     # 5. Return relevant lists containing strains for the training, validation or test, respectively
     return training, validation, test
 
-'''
-def split_input_data(gt_traits: dict):
-
-    env_train, env_valid, env_test = generate_train_validation_test_splits(gt_traits, ['PA', 'SA'])
-    pphen_train, pphen_valid, pphen_test = generate_train_validation_test_splits(gt_traits, ['PA_SYMB', 'PA_PATH'])
-    psite_train, psite_valid, psite_test = generate_train_validation_test_splits(gt_traits, ['PA_PHYL', 'PA_RHIZ'])
-
-    return env_train, env_valid, env_test, pphen_train, pphen_valid, pphen_test, psite_train, psite_valid, psite_test
-'''
-
 
 #  Store dictionaries and lists in pickle file
 def store_as_pickle(data: Union[dict, list], filename: str):
@@ -338,26 +242,15 @@ if __name__ == '__main__':
 
     ''' Generate input '''
     # Input dictionary
-    # input_dict_so = parse_dict_from_file('./data/filtered_abundance_single_output.csv') (only for single output)
     gene_list, input_dict = parse_dict_from_file('./data/filtered_abundance.csv')
     dictionary_to_images(input_dict)
-    #   Store input dictionary in pickle file
+    #   Store input dictionary & gene list in pickle file
     store_as_pickle(input_dict, 'input')
     store_as_pickle(gene_list, 'gene_list')
 
     ''' Generate ground truth (gt) dictionaries '''
 
-    ''' Required for single output
-    #   a1) Traits gt dictionary for single output
-    gt_traits = parse_dict_from_file('./data/single_output.csv')
-    #env_train, env_valid, env_test, pphen_train, pphen_valid, pphen_test, psite_train, psite_valid, psite_test =\
-    #    split_input_data(gt_traits)
-
-    #   Store gt_traits in pickle file
-    store_as_pickle(gt_traits, 'gt_traits')
-    '''
-
-    #   a2) Single dictionaries for environment, pa_pheno & pa_site
+    #   a) Single dictionaries for environment, pa_pheno & pa_site
     #       I) Environment gt dictionary
     gt_environment = parse_dict_from_file('./data/filtered_environment.csv')
     store_as_pickle(gt_environment, 'gt_environment')

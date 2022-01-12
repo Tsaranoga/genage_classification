@@ -8,6 +8,8 @@ from sklearn.metrics import accuracy_score
 from PIL import Image
 import pickle
 import matplotlib.pyplot as plt
+
+
 class Net(nn.Module):
     def __init__(self):
         super().__init__()
@@ -20,7 +22,7 @@ class Net(nn.Module):
         self.fc2 = nn.Linear(64, 64)
         self.pphen = nn.Linear(64, 2)
         self.env = nn.Linear(64, 7)
-        self.psite = nn.Linear(64,5)
+        self.psite = nn.Linear(64, 5)
 
     def forward(self, x):
         x = self.pool(F.relu(self.conv1(x)))
@@ -30,7 +32,7 @@ class Net(nn.Module):
         x = torch.flatten(x, 1)
         x = torch.tanh(self.fc1(x))
         x = torch.tanh(self.fc2(x))
-        return self.pphen(x),self.env(x),self.psite(x)
+        return self.pphen(x), self.env(x), self.psite(x)
 
 
 def right_bin_class(output, original):
@@ -131,8 +133,7 @@ def flatten(t):
     return [item for sublist in t for item in sublist]
 
 
-
-def generate_salency_map_nonabs(net, input, output, indexes, idx, losses, batchsize, strname):
+def generate_salency_map_nonabs(net, input, output, indexes, idx, losses, batchsize, strname,names,gennames):
     net.eval()
     right_idxes = []
     with torch.no_grad():
@@ -155,27 +156,33 @@ def generate_salency_map_nonabs(net, input, output, indexes, idx, losses, batchs
             todoidxes = [i for i in right_idxes if output[i][out_idx] == 1]
         all_pos = []
         all_neg = []
+        all_vals=[]
         if len(todoidxes) == 0:
             # print("not doing",out_idx, "from",idx)
             continue
         for index in todoidxes:
             inpt = torch.from_numpy(input[index]).float()[None, :, :, :]
-
             inpt.requires_grad_()
             net_out = net(inpt)[idx]
             net_out[0, out_idx].backward()
             saliency = inpt.grad.data
-            pos_vals = F.relu(torch.clone(saliency)).reshape(80 * 80).numpy()
-            neg_vals = F.relu(- torch.clone(saliency)).reshape(80 * 80).numpy()
-            all_pos.append(pos_vals)
-            all_neg.append(neg_vals)
-        all_pos = np.array(all_pos)
-        all_neg = np.array(all_neg)
-        normed_pos = np.mean(all_pos, axis=0).reshape(80, 80)
-        normed_neg = np.mean(all_neg, axis=0).reshape(80, 80)
+            pos_vals = torch.clone(saliency).reshape(80 * 80).numpy()
+            all_vals.append(pos_vals)
+
+        all_vals = np.mean(np.array(all_vals), axis=0)
+        normed_pos=all_vals.copy()
+        normed_neg= -1*all_vals.copy()
+        normed_pos[normed_pos<0]=0
+        normed_neg[normed_neg<0]=0
+        normed_pos = normed_pos.reshape(80, 80)
+        normed_neg = normed_neg.reshape(80, 80)
         with open(f"./maps_pickle/{strname}_salency_map_{idx}_{out_idx}_{len(todoidxes)}.pickle", "wb")  as f:
             pickle.dump({"pos": normed_pos, "neg": normed_neg, "amt": len(todoidxes), "inidx": idx, "outidx": out_idx},
                         f)
+        with open(f"maps_text/{strname}_{idx}_{out_idx}_{len(todoidxes)}_{names[out_idx]}_pos.txt","w") as f:
+            f.write(gen_txt_importance({"pos": normed_pos, "neg": normed_neg},gennames,"pos"))
+        with open(f"maps_text/{strname}_{idx}_{out_idx}_{len(todoidxes)}_{names[out_idx]}_neg.txt","w") as f:
+            f.write(gen_txt_importance({"pos": normed_pos, "neg": normed_neg},gennames,"neg"))
         maxcorr = max(normed_pos.max(), normed_neg.max())
         normed_pos *= (255.0 / maxcorr)
         normed_neg *= (255.0 / maxcorr)
@@ -183,8 +190,7 @@ def generate_salency_map_nonabs(net, input, output, indexes, idx, losses, batchs
         rgbArray[..., 0] = normed_neg  # *256
         rgbArray[..., 2] = normed_pos  # *256
         im = Image.fromarray(rgbArray)
-        print(maxcorr)
-        im.save(f"maps/{strname}_salency_map_{idx}_{out_idx}_{len(todoidxes)}.png", format="png")
+        im.save(f"maps/{strname}_salency_map_{idx}_{out_idx}_{len(todoidxes)}_{names[out_idx]}.png", format="png")
 
 
 def genweight_classes(data):
@@ -203,7 +209,7 @@ def genweight_multi_classes(data):
     return np.array([min(nws) / sum(data[:, i]) for i in range(len(data[0]))])
 
 
-def make_img(prefix, trainacc, testacc, loss, labels, classes_acc, classes_acc_test):
+def make_img(prefix, trainacc, testacc, loss, labels, classes_acc, classes_acc_test,namelist):
     fig, axs = plt.subplots(3 + len(classes_acc) * 2, figsize=(20, 15 * (3 + len(classes_acc) * 2)))
     fig.suptitle(prefix)
     x = list(range(len(trainacc[0])))
@@ -219,7 +225,7 @@ def make_img(prefix, trainacc, testacc, loss, labels, classes_acc, classes_acc_t
     axs[1].set_title('Test acc')
     axs[2].set_title('Loss')
     for cacc in range(len(classes_acc)):
-        x, y, lbls = make_class_img(classes_acc[cacc])
+        x, y, lbls = make_class_img(classes_acc[cacc],namelist[cacc])
         for c in y:
             axs[3 + cacc].plot(x, c, linewidth=4.0)
         axs[3 + cacc].legend(lbls)
@@ -227,7 +233,7 @@ def make_img(prefix, trainacc, testacc, loss, labels, classes_acc, classes_acc_t
         axs[3 + cacc].set_title(labels[cacc] + "_classes training")
 
     for cacc in range(len(classes_acc)):
-        x, y, lbls = make_class_img(classes_acc_test[cacc])
+        x, y, lbls = make_class_img(classes_acc_test[cacc],namelist[cacc])
         for c in y:
             axs[3 + len(classes_acc) + cacc].plot(x, c, linewidth=4.0)
         axs[3 + len(classes_acc) + cacc].legend(lbls)
@@ -237,19 +243,32 @@ def make_img(prefix, trainacc, testacc, loss, labels, classes_acc, classes_acc_t
     axs[1].set_ylim([0, 100])
 
     plt.savefig(prefix + "_mainimg.png")
-    print("image made")
     plt.clf()
     plt.close(fig)
 
-def make_class_img(dictlist):
+
+def make_class_img(dictlist,namelist):
     dictlist[0].pop('-1', None)
-    dictlist[0].pop('[0,0,0,0,0,0,0]', None)
+    dictlist[0].pop('[0 0 0 0 0 0 0]', None)
     labels = list(dictlist[0].keys())
+    reallabels=[]
+    if labels[0][0] !="[":
+        reallabels=[namelist[int(i)] for i in range(len(labels))]
+    else:
+        for lbl in labels:
+            #print(labels)
+            lblary=eval(lbl.replace(" ",","))
+            name=""
+            for i in range(len(lblary)):
+                if lblary[i]!=0:
+                    name +=namelist[i] + " "
+            reallabels.append(name)
     x = list(range(len(dictlist)))
     y = []
     for l in labels:
         y.append([dictlist[i][l] for i in range(len(dictlist))])
-    return x, y, labels
+    return x, y, reallabels
+
 
 net = Net()
 '''
@@ -274,81 +293,103 @@ for _ in range(30):
 generate_salency_map(net,images,output_classes_pphen,trainidx,0,loss,32)
 generate_salency_map(net,images,output_classes_env,trainidx,1,loss,32)
 '''
+
+
 def loadpick(file):
-    with open("./data/pickle_files/"+file,"rb") as f:
+    with open("./data/pickle_files/" + file, "rb") as f:
         return pickle.load(f)
-inputstuff=loadpick("input.p")
-input_keys=list(inputstuff.keys())
-dkey_to_idx={input_keys[i]:i for i in range(len(input_keys))}
 
-input_data=np.expand_dims(np.array([inputstuff[i] for i in input_keys]),axis=1)
 
-gt_site=loadpick("gt_pa_site.p")
-site_output=[-1 for _ in range(len(input_data))]
+def gen_txt_importance(dta,genenames,key):
+    dta=dta[key].reshape(-1)
+    maxval=max(dta)
+    ttval=sum(dta)
+    rtx=['genename\trelative perc\ttotalperc\tgradient']
+    for x in np.argsort(dta)[::-1]:
+        if dta[x] != 0:
+            rtx.append(f'{genenames[x]}\t{round(100*(dta[x]/maxval),2)}\t{round(100*(dta[x]/ttval),2)}\t{dta[x]}')
+    return "\n".join(rtx)
+inputstuff = loadpick("input.p")
+input_keys = list(inputstuff.keys())
+dkey_to_idx = {input_keys[i]: i for i in range(len(input_keys))}
+
+input_data = np.expand_dims(np.array([inputstuff[i] for i in input_keys]), axis=1)
+
+gt_site = loadpick("gt_pa_site.p")
+psite_out_names=list(gt_site["2693429607"].keys())
+
+site_output = [-1 for _ in range(len(input_data))]
 for k in gt_site:
-    site_output[dkey_to_idx[k]]=np.argmax(tuple(gt_site[k].values()))
-    if sum(gt_site[k].values())==0:
-        site_output[dkey_to_idx[k]]=3
-site_output=np.array(site_output)
+    site_output[dkey_to_idx[k]] = np.argmax(tuple(gt_site[k].values()))
+    if sum(gt_site[k].values()) == 0:
+        site_output[dkey_to_idx[k]] = 3
+site_output = np.array(site_output)
 
+gt_pphen = loadpick("gt_pa_pheno.p")
 
-
-gt_pphen=loadpick("gt_pa_pheno.p")
-pphen_output=[-1 for _ in range(len(input_data))]
+pphen_out_names=list(gt_pphen["2786546145"].keys())
+pphen_output = [-1 for _ in range(len(input_data))]
 
 for k in gt_pphen:
-    pphen_output[dkey_to_idx[k]]=np.argmax(list(gt_pphen[k].values()))
-pphen_output=np.array(pphen_output)
+    pphen_output[dkey_to_idx[k]] = np.argmax(list(gt_pphen[k].values()))
+pphen_output = np.array(pphen_output)
 
-
-gt_env=loadpick("gt_environment.p")
-env_output=[[0,0,0,0,0,0,0] for _ in range(len(input_data))]
+gt_env = loadpick("gt_environment.p")
+env_out_names=list(gt_env["2786546145"].keys())
+env_output = [[0, 0, 0, 0, 0, 0, 0] for _ in range(len(input_data))]
 for k in gt_env:
-    env_output[dkey_to_idx[k]]=list(gt_env[k].values())
-env_output=np.array(env_output)
+    env_output[dkey_to_idx[k]] = list(gt_env[k].values())
+env_output = np.array(env_output)
 
-
-env_training=loadpick("env_training.p")
-env_test=loadpick("env_test.p")
-env_train=[dkey_to_idx[i] for i in env_training]
+env_training = loadpick("env_training.p")
+env_test = loadpick("env_test.p")
+env_train = [dkey_to_idx[i] for i in env_training]
 env_test = [dkey_to_idx[i] for i in env_test]
 
-pphen_training=loadpick("pphen_training.p")
-pphen_test=loadpick("pphen_test.p")
-pphen_train=[dkey_to_idx[i] for i in pphen_training]
+pphen_training = loadpick("pphen_training.p")
+pphen_test = loadpick("pphen_test.p")
+pphen_train = [dkey_to_idx[i] for i in pphen_training]
 pphen_test = [dkey_to_idx[i] for i in pphen_test]
 
-site_training=loadpick("psite_training.p")
-site_test=loadpick("psite_test.p")
-site_train=[dkey_to_idx[i] for i in site_training]
+site_training = loadpick("psite_training.p")
+site_test = loadpick("psite_test.p")
+site_train = [dkey_to_idx[i] for i in site_training]
 site_test = [dkey_to_idx[i] for i in site_test]
 
+with open("./data/pickle_files/gene_list.p","rb") as f:
+    genenames=np.array(pickle.load(f))
 
-base_data=len(env_training)
-base_lr=0.001
+base_data = len(pphen_training)
+base_lr = 0.001
 
-lr_pphen=base_lr * (base_data/len(pphen_training))
-lr_env=base_lr * (base_data/len(env_training))
-lr_psite=base_lr * (base_data/len(site_training))
-print("lrs:",lr_pphen,lr_env,lr_psite)
+lr_pphen = base_lr * (base_data / len(pphen_training))
+lr_env = base_lr * (base_data / len(env_training))
+lr_psite = base_lr * (base_data / len(site_training))
+print("lrs:", lr_pphen, lr_env, lr_psite)
 
+print("weights:", genweight_classes(pphen_output), genweight_classes(site_output))
 
-print("weights:",genweight_classes(pphen_output),genweight_classes(site_output))
-
-loss = [nceloss(genweight_classes(pphen_output)),mcloss(genweight_multi_classes(env_output),0.9),nceloss(genweight_classes(site_output))]
-optimizer = [optim.Adam(net.parameters(), lr=lr_pphen),optim.Adam(net.parameters(), lr=lr_env),optim.Adam(net.parameters(), lr=lr_psite)] # adapt learning rate to be equal for all outputs
+loss = [nceloss(genweight_classes(pphen_output)), mcloss(genweight_multi_classes(env_output), 0.9),
+        nceloss(genweight_classes(site_output))]
+optimizer = [optim.Adam(net.parameters(), lr=lr_pphen), optim.Adam(net.parameters(), lr=lr_env),
+             optim.Adam(net.parameters(), lr=lr_psite)]  # adapt learning rate to be equal for all outputs
 bsize = 32
 
-prefix = "env_only"
-t_to_idx = {"pphen": -1, "env": 0, "psite": -1}
+prefix = "all_overnight"
+t_to_idx = {"pphen": 0, "env": 1, "psite": 2}
 train = [[] for i in t_to_idx.values() if i != -1]
 test = [[] for i in t_to_idx.values() if i != -1]
 losses = [[] for i in t_to_idx.values() if i != -1]
 class_accs = [[] for i in t_to_idx.values() if i != -1]
 class_accs_tst = [[] for i in t_to_idx.values() if i != -1]
 labels = [i for i in t_to_idx if t_to_idx[i] != -1]
-
-
+names=[None,None,None]
+if t_to_idx["pphen"] != -1:
+    names[t_to_idx["pphen"]]=pphen_out_names
+if t_to_idx["env"] != -1:
+    names[t_to_idx["env"]]=env_out_names
+if t_to_idx["psite"] != -1:
+    names[t_to_idx["psite"]]=psite_out_names
 for i in range(300):
     print(i)
     # train
@@ -378,19 +419,19 @@ for i in range(300):
         test[t_to_idx["pphen"]].append(acc)
         class_accs_tst[t_to_idx["pphen"]].append(cacc)
 
-        generate_salency_map_nonabs(net, input_data, pphen_output, pphen_test, 0, loss, bsize, f'{prefix}_ep_{i}_phen')
+        generate_salency_map_nonabs(net, input_data, pphen_output, pphen_test, 0, loss, bsize, f'{prefix}_ep_{i}_phen',pphen_out_names,genenames)
 
     if t_to_idx["env"] != -1:
         acc, cacc = checkdata(net, input_data, env_output, env_test, bsize, 1, loss)
         test[t_to_idx["env"]].append(acc)
         class_accs_tst[t_to_idx["env"]].append(cacc)
-        generate_salency_map_nonabs(net, input_data, env_output, env_test, 1, loss, bsize, f'{prefix}_ep_{i}_env')
+        generate_salency_map_nonabs(net, input_data, env_output, env_test, 1, loss, bsize, f'{prefix}_ep_{i}_env',env_out_names,genenames)
 
     if t_to_idx["psite"] != -1:
         acc, cacc = checkdata(net, input_data, site_output, site_test, bsize, 2, loss)
         test[t_to_idx["psite"]].append(acc)
         class_accs_tst[t_to_idx["psite"]].append(cacc)
-        generate_salency_map_nonabs(net, input_data, site_output, site_test, 2, loss, bsize, f'{prefix}_ep_{i}_site')
+        generate_salency_map_nonabs(net, input_data, site_output, site_test, 2, loss, bsize, f'{prefix}_ep_{i}_site',psite_out_names,genenames)
 
-    make_img(prefix, train, test, losses, labels, class_accs, class_accs_tst)
+    make_img(prefix, train, test, losses, labels, class_accs, class_accs_tst,names)
     torch.save(net.state_dict(), f"./nets/{prefix}_net_{i}.sdict")

@@ -33,12 +33,11 @@ def parse_dict_from_file(filepath: str, delim: str = ',') -> Union[dict, Tuple[l
 
         for index, row in enumerate(reader):
 
-            # matrix = np.zeros((80, 80), dtype=int)
-
             if index == 0:
                 header_row = row
 
-                if len(header_row) == 6356:
+                #if len(header_row) == 6356:
+                if len(header_row) == 5162:
 
                     for gene in header_row[1:]:
                         genes.append(gene)
@@ -49,13 +48,15 @@ def parse_dict_from_file(filepath: str, delim: str = ',') -> Union[dict, Tuple[l
                     current_row = row
                     strain = current_row[0]
 
-                    if len(header_row) == 6356:
+                    #if len(header_row) == 6356:
+                    if len(header_row) == 5162:
 
                         matrix_as_list = [int(x) for x in current_row[1:]]
                         # print(len(matrix_as_list))
                         # matrix[:] = matrix_as_list
                         matrix = np.array(matrix_as_list, dtype=int)
-                        matrix.resize((80, 80))
+                        #matrix.resize((80, 80)) For all genes
+                        matrix.resize((72, 72))  # For all genes except the ones that are not contained in any strain
 
                         matrix = np.where(matrix == 0, 0, 1)
 

@@ -33,11 +33,31 @@ def read_csv_file(filepath: str, separator: bool, data_types: Tuple[str, str]) -
     return dataframe
 
 
+def drop_cols(dataframe: pd.DataFrame, threshold: int) -> pd.DataFrame:
+    """
+
+    :param dataframe: Input pandas dataframe
+    :param threshold: Integer specifying the minimum amount of entries required for each column in input dataframe
+    :return: Pandas dataframe containing all columns that meet at least the threshold
+    """
+
+    cols_to_drop = []
+
+    for i in dataframe.columns:
+        if int(dataframe.sum(axis=0).loc[i]) < threshold:
+            cols_to_drop.append(i)
+
+    dataframe = dataframe.drop(cols_to_drop, axis=1)
+
+    return dataframe
+
+
 if __name__ == '__main__':
 
     ''' Import all csv files '''
     #   a) abundance file
     abundance = read_csv_file('./data/PGPT_abundance.csv', False, ('str', 'int'))
+    abundance = drop_cols(abundance, 1)
     abundance.name = 'abundance'
 
     #   b) env file
@@ -66,16 +86,14 @@ if __name__ == '__main__':
 
     # Subset all other files such that only strains with classified phyla persist
     # & Save the filtered dataframes to files
+
     df_list = [abundance, environment, pa_pheno, pa_site]
 
     for df in df_list:
         file = f'./data/filtered_{df.name}.csv'
         tmp_df = df.loc[df[df.columns[0]].isin(classified_strains)]
 
-        if df.name == 'abundance':
-            new_abundance = tmp_df
-
-        #print(f'Shape filtered {df.name}: {tmp_df.shape}')
+        # print(f'Shape filtered {df.name}: {tmp_df.shape}')
         tmp_df.to_csv(file, sep=',', encoding='utf-8', index=False)
 
     ''' Sanity Checks '''

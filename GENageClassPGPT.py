@@ -538,8 +538,11 @@ def zscorenorm(input_data):
             pickle.dump([ipf,normvals],f)
     return ipf
 
+
+# starting image size - this is important if you want to use other input data
 image_size=72
 
+#loading all the stuff from the pickles and converting
 inputstuff = loadpick("input.p")
 input_keys = list(inputstuff.keys())
 dkey_to_idx = {input_keys[i]: i for i in range(len(input_keys))}
@@ -608,6 +611,10 @@ with open("./data/pickle_files/gene_list.p","rb") as f:
 while len(genenames)!= image_size*image_size:
     genenames.append("-")
 genenames=np.array(genenames)
+# everything loaded - if you want to use other inputs make sure that your data looks similar :)
+
+
+# network balancing
 base_data = len(pphen_training)
 base_lr = 0.001
 
@@ -618,11 +625,15 @@ print("lrs:", lr_pphen, lr_env, lr_psite)
 
 print("weights:", genweight_classes(pphen_output), genweight_classes(site_output),genweight_multi_classes(env_output))
 
+#important: what shall be trained, etc - total configuration here (-1 is not used, the ones used please from 0-inf)
 dropout=40
 bsize = 16
 zscorenormalize=False
 occurence_only=True
 pphen_Genes_only=True
+t_to_idx = {"pphen": 0, "env": -1, "psite": -1}
+epoch_amt=30
+
 
 net = Net(dropout)
 loss = [nceloss(genweight_classes(pphen_output)), mcloss(genweight_multi_classes(env_output), 0.9),
@@ -636,7 +647,7 @@ test_mean_classify(input_data,pphen_train,pphen_test,pphen_output)
 
 
 prefix = f'batchsize {bsize} dropout {dropout}'
-t_to_idx = {"pphen": 0, "env": -1, "psite": -1}
+
 train = [[] for i in t_to_idx.values() if i != -1]
 test = [[] for i in t_to_idx.values() if i != -1]
 losses = [[] for i in t_to_idx.values() if i != -1]
@@ -669,8 +680,6 @@ if occurence_only:
     input_data = np.where(input_data == 0, 0, 1)
 
 
-GENageClassPGPT.py
-
 if t_to_idx["pphen"] != -1:
     names[t_to_idx["pphen"]]=pphen_out_names
 if t_to_idx["env"] != -1:
@@ -691,7 +700,10 @@ os.mkdir("./graphs/" + prefix + "/maps")
 os.mkdir("./graphs/" + prefix + "/maps_pickle")
 os.mkdir("./graphs/" + prefix + "/maps_text")
 os.mkdir("./graphs/" + prefix + "/nets")
-for i in range(30):
+
+
+# the training loop
+for i in range(epoch_amt):
     print(i)
     # train
     if t_to_idx["pphen"] != -1:

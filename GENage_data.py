@@ -58,7 +58,7 @@ def parse_dict_from_file(filepath: str, delim: str = ',') -> Union[dict, Tuple[l
                         #matrix.resize((80, 80)) For all genes
                         matrix.resize((72, 72))  # For all genes except the ones that are not contained in any strain
 
-                        matrix = np.where(matrix == 0, 0, 1)
+                        matrix = np.where(matrix == 0, 0, 1)  # Only required for occurrence values
 
                         dictionary.update({strain: matrix})
 

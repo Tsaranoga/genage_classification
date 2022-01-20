@@ -23,3 +23,8 @@ __Disclaimer:__ Genages generated with __dictionary_to_images__ are currently
 not saved in the directory but on another hard drive. Before running the code please change this.
 
 __Disclaimer:__ This program is currently hard-coded on the data from the project.
+
+__Hint:__ For the main program GENageClassPGPT.py lines 61 and 247 are obsolete 
+and should be commented out.
+
+# Network: GENageClassPGPT

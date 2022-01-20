@@ -27,4 +27,4 @@ __Disclaimer:__ This program is currently hard-coded on the data from the projec
 __Hint:__ For the main program GENageClassPGPT.py lines 61 and 247 are obsolete 
 and should be commented out.
 
-# Network: GENageClassPGPT
+## Network: GENageClassPGPT

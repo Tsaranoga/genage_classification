@@ -1,5 +1,4 @@
 import torch.nn as nn
-import torch.nn.functional as F
 import torch
 import torch.optim as optim
 import numpy as np
@@ -12,94 +11,42 @@ import cv2
 import os
 class Net(nn.Module):
     def __init__(self,dropout):
+        '''
+        initialization of the neral net with given dropout
+        :param dropout:
+        '''
         super().__init__()
-        self.conv1 = nn.Conv2d(1, 32, 3, padding=1)
-        self.conv2 = nn.Conv2d(32, 32, 3, padding=1)
-        self.pool = nn.MaxPool2d(2, 2)
-        self.conv3 = nn.Conv2d(32, 16, 3, padding=1)
-        self.conv4 = nn.Conv2d(16, 8, 3, padding=1)
-        self.fc1 = nn.Linear(128, 128)
-        self.fc2 = nn.Linear(128, 64)
         self.pphen = nn.Linear(64, 2)
         self.env = nn.Linear(64, 7)
         self.psite = nn.Linear(64, 5)
-        self.drop=nn.Dropout(p=dropout/100)
-
-    def forward(self, x):
-        x = self.pool(F.relu(self.conv1(x)))
-        x = self.pool(F.relu(self.conv2(x)))
-        x = self.pool(F.relu(self.conv3(x)))
-        x = self.pool(F.relu(self.conv4(x)))
-        x = torch.flatten(x, 1)
-        x=self.drop(x)
-        x = torch.tanh(self.fc1(x))
-        x = torch.tanh(self.fc2(x))
-        return self.pphen(x), self.env(x), self.psite(x)
-class Net3(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.conv1 = nn.Conv2d(1, 16, 3)
-        self.conv2 = nn.Conv2d(16, 16, 3)
-        self.pool = nn.MaxPool2d(2, 2)
-        self.conv3 = nn.Conv2d(16, 8, 5)
-        self.conv4 = nn.Conv2d(8, 8, 5)
-        self.fc1 = nn.Linear(1800, 1024)
-        self.fc2 = nn.Linear(1024, 512)
-        self.fc3 = nn.Linear(512, 256)
-        self.pphen = nn.Linear(256, 2)
-        self.env = nn.Linear(256, 7)
-        self.psite = nn.Linear(256, 5)
-
-    def forward(self, x):
-        x = F.relu(self.conv1(x))
-        x = self.pool(F.relu(self.conv2(x)))
-        x = F.relu(self.conv3(x))
-        x = self.pool(F.relu(self.conv4(x)))
-        x = torch.flatten(x, 1)
-        #
-        x = torch.tanh(self.fc1(x))
-        x = torch.tanh(self.fc2(x))
-        x = torch.tanh(self.fc3(x))
-        return self.pphen(x), self.env(x), self.psite(x)
-class Net2(nn.Module):
-    def __init__(self):
-        super().__init__()
         self.seq = nn.Sequential(
-            nn.Conv2d(1, 32, 3, padding=0),
-            nn.ReLU(),
-            nn.Conv2d(32, 32, 3, padding=0),
+            nn.Conv2d(1, 32, 3, padding=1),
             nn.ReLU(),
             nn.MaxPool2d(2, 2),
-            nn.Conv2d(32, 16, 5, padding=0),
-            nn.ReLU(),
-            nn.Conv2d(16, 16, 5, padding=0),
+            nn.Conv2d(32, 32, 3, padding=1),
             nn.ReLU(),
             nn.MaxPool2d(2, 2),
-            nn.Conv2d(16, 8, 5, padding=0),
+            nn.Conv2d(32, 16, 3, padding=1),
             nn.ReLU(),
-            nn.Conv2d(8, 8, 5, padding=0),
+            nn.MaxPool2d(2, 2),
+            nn.Conv2d(16, 8, 3, padding=1),
             nn.ReLU(),
             nn.MaxPool2d(2, 2),
             nn.Flatten(),
-            nn.Linear(72, 128),
-            nn.Tanh(),
+            nn.Dropout(p=dropout/100),
             nn.Linear(128, 128),
             nn.Tanh(),
-            nn.Linear(128, 256),
-            nn.Tanh(),
-            nn.Dropout(p=0.2),
+            nn.Linear(128, 64),
+            nn.Tanh()
         )
-        self.pphen = nn.Sequential(nn.Linear(256, 128),
-                                   nn.Tanh(), nn.Linear(128, 2))
-        self.env = nn.Sequential(nn.Linear(256, 128),
-                                 nn.Tanh(), nn.Linear(128, 7))
-        self.psite = nn.Sequential(nn.Linear(256, 128),
-                                   nn.Tanh(), nn.Linear(128, 5))
-
     def forward(self, x):
-        x = self.seq(x)
+        '''
+        how input is getting propagated
+        :param x:
+        :return:
+        '''
+        x=self.seq(x)
         return self.pphen(x), self.env(x), self.psite(x)
-
 
 class nceloss:
     def __init__(self, weight):
@@ -142,13 +89,11 @@ class nceloss:
         oux = opt.detach().numpy()
         return [i for i in range(len(opt)) if np.argmax(oux[i]) == original[i]]
 
-
 class mcloss:
     '''
     all line in nceloss but for  multiclass labels, also a threshhold for when we think something is predicted right
     '''
     def __init__(self, weight, threshhold):
-        print(weight)
         self.lossf = nn.BCEWithLogitsLoss(weight=torch.FloatTensor(weight))
         self.thresh = threshhold
 
@@ -165,6 +110,7 @@ class mcloss:
     def right_idx(self, opt, original):
         oux = torch.sigmoid(opt.detach()).numpy()
         return [i for i in range(len(oux)) if accuracy_score(original[i], oux[i].round()) > self.thresh]
+
 
 
 def train_epoch(net, losses, optimizers, input, output, indexes, batchsize, idx):
@@ -216,6 +162,17 @@ def batches(l, n):
 
 
 def checkdata(net, input, output, indexes, batchsize, idx, losses):
+    '''
+    evaluates the network with the given data and returns the accuracy as well as the accuracy for each class
+    :param net:
+    :param input:
+    :param output:
+    :param indexes:
+    :param batchsize:
+    :param idx:
+    :param losses:
+    :return:
+    '''
     net.eval()
     rightamt = 0
     classesright = {str(i): 0 for i in output}
@@ -280,7 +237,6 @@ def generate_salency_map_nonabs(net, input, output, indexes, idx, losses, batchs
             todoidxes = [i for i in right_idxes if output[i][out_idx] == 1]
         all_vals=[]
         if len(todoidxes) == 0:
-            # print("not doing",out_idx, "from",idx)
             continue
         for index in todoidxes:
             inpt = torch.from_numpy(input[index]).float()[None, :, :, :]
@@ -314,8 +270,8 @@ def generate_salency_map_nonabs(net, input, output, indexes, idx, losses, batchs
         normed_pos *= (255.0 / maxcorr)
         normed_neg *= (255.0 / maxcorr)
         rgbArray = np.zeros((image_size, image_size, 3), 'uint8')
-        rgbArray[..., 0] = normed_neg  # *256
-        rgbArray[..., 2] = normed_pos  # *256
+        rgbArray[..., 0] = normed_neg
+        rgbArray[..., 2] = normed_pos
         im = Image.fromarray(rgbArray)
         im.save(f"./graphs/{strname}/maps/{epnr}_salency_map_{idx}_{out_idx}_{len(todoidxes)}_{names[out_idx]}.png", format="png")
 
@@ -332,7 +288,7 @@ def genweight_classes(data):
     if max(data) + 1 != len(values):
         print("something is wrong", max(data), len(values), values)
         exit(-1)
-    minval = max(counts)
+    minval = min(counts)
     return [minval / j for j in counts]
 
 
@@ -343,7 +299,7 @@ def genweight_multi_classes(data):
     :return:
     '''
     nws = np.array([sum(data[:, i]) for i in range(len(data[0]))])
-    return np.array([max(nws) / sum(data[:, i]) for i in range(len(data[0]))])
+    return np.array([min(nws) / sum(data[:, i]) for i in range(len(data[0]))])
 
 
 def make_img(prefix, trainacc, testacc, loss, labels, classes_acc, classes_acc_test,namelist):
@@ -439,7 +395,6 @@ def make_class_img(dictlist,namelist):
         reallabels=[namelist[int(i)] for i in range(len(labels))]
     else:
         for lbl in labels:
-            #print(labels)
             lblary=eval(lbl.replace(" ",","))
             name=""
             for i in range(len(lblary)):
@@ -452,15 +407,23 @@ def make_class_img(dictlist,namelist):
         y.append([dictlist[i][l] for i in range(len(dictlist))])
     return x, y, reallabels
 
-
-
-
 def loadpick(file):
+    '''
+    small helper function to load the pickle files
+    :param file:
+    :return:
+    '''
     with open("./data/pickle_files/" + file, "rb") as f:
         return pickle.load(f)
 
-
 def gen_txt_importance(dta,genenames,key):
+    '''
+    creates the table for positive/negative relating genes
+    :param dta:
+    :param genenames:
+    :param key:
+    :return:
+    '''
 
     dta1=dta["pos"].reshape(-1)
     dta2=dta["neg"].reshape(-1)
@@ -477,9 +440,13 @@ def gen_txt_importance(dta,genenames,key):
             rtx.append(f'{genenames[x]}\t{round(100*(dta[x]/maxval),2)}\t{round(100*(dta[x]/ttval),2)}\t{dta[x]}')
     return "\n".join(rtx)
 
-
-
 def gen_txt__not_importance(dta,genenames):
+    '''
+    returns the text for unimportant genes
+    :param dta:
+    :param genenames:
+    :return:
+    '''
     dta1=dta["pos"].reshape(-1)
     dta2=dta["neg"].reshape(-1)
     rtx=['genename']
@@ -493,29 +460,26 @@ def gen_txt__not_importance(dta,genenames):
             rtx.append(f'{genenames[x]}')
     return "\n".join(rtx)
 
-
-def pad_along_axis(array: np.ndarray, target_length: int, axis: int = 0):
-
-    pad_size = target_length - array.shape[axis]
-
-    if pad_size <= 0:
-        return array
-
-    npad = [(0)] * array.ndim
-
-    npad[axis] = (0, pad_size)
-
-    return np.pad(array, pad_width=npad, mode='constant', constant_values=0)
-
 def gen_inputmap(input_data,indexes,filename):
+    '''
+    makes an average image for the given images (used just for curiosity for pphen)
+    :param input_data:
+    :param indexes:
+    :param filename:
+    :return:
+    '''
     phen_maps=input_data[indexes]
-    meanstuff=np.max(phen_maps,axis=0).reshape(image_size,image_size)
-    #meanstuff -=1
-    #print(sum(meanstuff))
-    #return
+    meanstuff=np.mean(phen_maps,axis=0).reshape(image_size,image_size)
     cv2.imwrite(f'{filename}.png', meanstuff*255)
 
 def pad_along_axis(array: np.ndarray, target_length: int, axis: int = 0):
+    '''
+    function from stackoverflow to pad in another dimension when using pphengenes only
+    :param array:
+    :param target_length:
+    :param axis:
+    :return:
+    '''
 
     pad_size = target_length - array.shape[axis]
 
@@ -527,8 +491,15 @@ def pad_along_axis(array: np.ndarray, target_length: int, axis: int = 0):
 
     return np.pad(array, pad_width=npad, mode='constant', constant_values=0)
 
-
 def test_mean_classify(input_data,trainidx,testidx,output):
+    '''
+    test how good the classes can be approximated using the average image
+    :param input_data:
+    :param trainidx:
+    :param testidx:
+    :param output:
+    :return:
+    '''
     classmaps=[np.mean(input_data[[i for i in trainidx if output[i]==0]],axis=0).reshape(image_size*image_size),
                np.mean(input_data[[i for i in trainidx if output[i]==1]],axis=0).reshape(image_size*image_size),
                ]
@@ -539,11 +510,36 @@ def test_mean_classify(input_data,trainidx,testidx,output):
         c2=sum(abs(ipx-classmaps[1]))
         if c1 <c2 and output[t_idx]==0  or c1 >c2 and output[t_idx]==1:
             right+=1
-    print(right,right/len(testidx))
 
-dropout=30
+def zscorenorm(input_data):
+    '''
+    applying zscore enormalization/loads the pickle if it exists
+    :param input_data:
+    :return:
+    '''
+    if os.path.isfile("./data/pickle_files/zscored.pickle"):
+        with open("./data/pickle_files/zscored.pickle","rb") as f:
+            return pickle.load(f)[0]
+    normvals=[]
+    ipf=input_data.reshape(-1,image_size*image_size)
+    for gene in range(image_size*image_size):
+        normdata=[i[gene] for i in ipf[pphen_train]]
+        meanv=np.mean(normdata)
+        stdv=np.std(normdata)
+        if stdv==0:
+            stdv=1
+        normvals.append({"mean":meanv,"std":stdv})
+        for i in range(ipf.shape[0]):
+            ipf[i][gene]= (ipf[i][gene] - meanv)/stdv
+
+    ipf=ipf.reshape(-1,1,image_size,image_size)
+    if  not os.path.isfile("./data/pickle_files/zscored.pickle"):
+        with open("./data/pickle_files/zscored.pickle","wb") as f:
+            pickle.dump([ipf,normvals],f)
+    return ipf
+
 image_size=72
-net = Net(dropout)
+
 inputstuff = loadpick("input.p")
 input_keys = list(inputstuff.keys())
 dkey_to_idx = {input_keys[i]: i for i in range(len(input_keys))}
@@ -570,8 +566,7 @@ for k in gt_site:
         site_output[dkey_to_idx[k]] = 3
 site_output = np.array(site_output)
 
-unique,counts =np.unique(site_output,return_counts=True)
-print("psite counts:",unique,counts)
+
 
 gt_pphen = loadpick("gt_pa_pheno.p")
 
@@ -589,8 +584,7 @@ for k in gt_env:
     env_output[dkey_to_idx[k]] = list(gt_env[k].values())
 env_output = np.array(env_output)
 
-unique,counts =np.unique([str(i) for i in env_output],return_counts=True)
-print(unique,counts,env_output)
+
 
 env_training = loadpick("env_training.p")
 env_test = loadpick("env_test.p")
@@ -623,19 +617,23 @@ lr_psite = base_lr * (base_data / len(site_training))
 print("lrs:", lr_pphen, lr_env, lr_psite)
 
 print("weights:", genweight_classes(pphen_output), genweight_classes(site_output),genweight_multi_classes(env_output))
-#exit(0)
+
+dropout=40
+bsize = 16
+zscorenormalize=False
+occurence_only=True
+pphen_Genes_only=True
+
+net = Net(dropout)
 loss = [nceloss(genweight_classes(pphen_output)), mcloss(genweight_multi_classes(env_output), 0.9),
         nceloss(genweight_classes(site_output))]
 optimizer = [optim.Adam(net.parameters(), lr=lr_pphen), optim.Adam(net.parameters(), lr=lr_env),
              optim.Adam(net.parameters(), lr=lr_psite)]  # adapt learning rate to be equal for all outputs
-bsize = 32
+
 
 
 test_mean_classify(input_data,pphen_train,pphen_test,pphen_output)
 
-
-print(len(input_data))
-print(input_data[0].shape)
 
 prefix = f'batchsize {bsize} dropout {dropout}'
 t_to_idx = {"pphen": 0, "env": -1, "psite": -1}
@@ -648,9 +646,11 @@ labels = [i for i in t_to_idx if t_to_idx[i] != -1]
 names=[None,None,None]
 
 # input changing  (abundance or zscore)
-zscorenormalize=False
-occurence_only=True
-pphen_Genes_only=False
+
+if zscorenormalize:
+    prefix += " zscore normalized"
+    input_data=zscorenorm(input_data)
+
 if pphen_Genes_only:
     prefix += " pphen genes only"
     datawewant=input_data[pphen_train + pphen_test + pphen_val]
@@ -668,22 +668,8 @@ if occurence_only:
     prefix += " occurence"
     input_data = np.where(input_data == 0, 0, 1)
 
-if zscorenormalize:
-    prefix += " zscore normalized"
-    normvals=[]
-    ipf=input_data.reshape(-1,image_size*image_size)
-    for gene in range(image_size*image_size):
-        normdata=[i[gene] for i in ipf[pphen_train]]
-        meanv=np.mean(normdata)
-        stdv=np.std(normdata)
-        if stdv==0:
-            stdv=1
-        normvals.append({"mean":meanv,"std":stdv})
-        for i in range(ipf.shape[0]):
-            ipf[i][gene]= (ipf[i][gene] - meanv)/stdv
 
-    ipf=ipf.reshape(-1,1,image_size,image_size)
-    input_data=ipf
+GENageClassPGPT.py
 
 if t_to_idx["pphen"] != -1:
     names[t_to_idx["pphen"]]=pphen_out_names
@@ -699,14 +685,13 @@ gen_inputmap(input_data,[i for i in range(len(input_data))],f'all_data')
 
 gen_inputmap(input_data,[i for i in pphen_train + pphen_test + pphen_val],f'all_data_pphen')
 
-print(input_data.shape)
 
 os.mkdir("./graphs/" + prefix)
 os.mkdir("./graphs/" + prefix + "/maps")
 os.mkdir("./graphs/" + prefix + "/maps_pickle")
 os.mkdir("./graphs/" + prefix + "/maps_text")
 os.mkdir("./graphs/" + prefix + "/nets")
-for i in range(50):
+for i in range(30):
     print(i)
     # train
     if t_to_idx["pphen"] != -1:
@@ -736,7 +721,7 @@ for i in range(50):
         class_accs_tst[t_to_idx["pphen"]].append(cacc)
         print("test pphen:", acc)
 
-        generate_salency_map_nonabs(net, input_data, pphen_output, pphen_test, 0, loss, bsize, prefix,pphen_out_names,genenames,i)
+        generate_salency_map_nonabs(net, input_data, pphen_output, pphen_train+pphen_test, 0, loss, bsize, prefix,pphen_out_names,genenames,i)
 
     if t_to_idx["env"] != -1:
         acc, cacc = checkdata(net, input_data, env_output, env_test, bsize, 1, loss)

@@ -654,7 +654,7 @@ optimizer = [optim.Adam(net.parameters(), lr=lr_pphen), optim.Adam(net.parameter
 
 test_mean_classify(input_data, pphen_train, pphen_test, pphen_output)
 
-prefix = f'3batchsize {bsize} dropout {dropout}'
+prefix = f'batchsize {bsize} dropout {dropout}'
 
 train = [[] for i in t_to_idx.values() if i != -1]
 test = [[] for i in t_to_idx.values() if i != -1]

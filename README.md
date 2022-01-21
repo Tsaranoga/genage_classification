@@ -28,3 +28,15 @@ __Hint:__ For the main program GENageClassPGPT.py lines 61 and 247 are obsolete
 and should be commented out.
 
 ## Network: GENageClassPGPT
+
+The network uses the prepared data and trains the neural net.
+Parameters like which outputs shall be trained, dropouts and input methods can be set in line 640-647.
+For the outputs a folder called graphs need to be generated, inside there every run will have its own folder with the results.
+
+dependencies:
+- pytorch
+- numpy
+- sklearn
+- PIL
+- matplotlib
+- cv2
